@@ -4,7 +4,8 @@
 //! use that information to divide the tests into sub-suites that can be run in parallel.
 //!
 //! Each task will contain the generated sub-suites.
-use std::{cmp::min, collections::HashMap, sync::Arc};
+use core::task;
+use std::{cmp::max, cmp::min, collections::HashMap, sync::Arc};
 
 use anyhow::Result;
 use async_trait::async_trait;
@@ -435,6 +436,14 @@ impl GenResmokeTaskServiceImpl {
             .filter(|(_, history)| test_list.contains(&history.test_name))
             .fold(0.0, |init, (_, item)| init + item.average_runtime);
 
+        let max_runtime = task_stats
+            .test_map
+            .values()
+            .filter(|history| test_list.contains(&history.test_name))
+            .map(|item| item.average_runtime)
+            .max_by(|a, b| a.partial_cmp(b).unwrap())
+            .unwrap_or(0.0);
+
         let ideal_num_tasks = match params.num_tasks {
             Some(t) => t,
             None if build_variant
@@ -452,10 +461,32 @@ impl GenResmokeTaskServiceImpl {
             None => self.subtask_limits.default_subtasks_per_task,
         };
 
+        let jobs_estimate = if params.use_large_distro { 16.0 } else { 4.0 };
+
+        event!(
+            Level::INFO,
+            "MIN_RUNTIMe: {}, total_runtime: {}, max_task_runtime: {}, tests: {}",
+            &params.suite_name,
+            total_runtime,
+            max_runtime,
+            test_list.len()
+        );
+
+        let efficient_num_tasks = if max_runtime != 0.0 && total_runtime != 0.0 {
+            let min_runtime_per_task = jobs_estimate * max_runtime;
+            max(
+                (total_runtime / min_runtime_per_task).ceil() as usize,
+                1usize,
+            )
+        } else {
+            ideal_num_tasks
+        };
+
         let num_tasks = *[
             ideal_num_tasks,
             test_list.len(),
             self.subtask_limits.max_subtasks_per_task,
+            efficient_num_tasks,
         ]
         .iter()
         .min()

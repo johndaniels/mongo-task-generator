@@ -161,7 +161,7 @@ struct Args {
 /// Configure logging for the command execution.
 fn configure_logging() {
     let format = format::json();
-    let subscriber = tracing_subscriber::fmt().event_format(format).finish();
+    let subscriber = tracing_subscriber::fmt().pretty().finish();
 
     tracing::subscriber::set_global_default(subscriber).unwrap();
 }

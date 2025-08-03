@@ -492,6 +492,9 @@ impl GenerateTasksService for GenerateTasksServiceImpl {
                 .evg_config_utils
                 .infer_build_variant_platform(build_variant);
             for task in &build_variant.tasks {
+                // if task.name != "noPassthrough_gen" {
+                //     continue;
+                // }
                 // Burn in tasks could be different for each build variant, so we will always
                 // handle them.
                 if self.gen_burn_in {
